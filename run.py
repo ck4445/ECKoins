@@ -3,7 +3,7 @@ import subprocess
 import sys
 import hashlib
 
-DEFAULT_REPO_URL = "https://github.com/ck4445/ECKOBits.git"
+DEFAULT_REPO_URL = "https://github.com/ck4445/ECKoins.git"
 
 def run_command(cmd, cwd=None):
     try:
