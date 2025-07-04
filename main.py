@@ -105,17 +105,36 @@ def getpolitics():
 
 
 @client.request
-def command(cmd):
+def getemployees(company):
+    """
+    Returns the list of employees (members) for a given company.
+    """
+    company_fixed = data.fix_name(company)
+    company_data = data.get_company_data(company_fixed)
+    if not company_data:
+        return []
+    return company_data.get("members", [])
+
+
+@client.request
+def command(p1=None, p2=None, p3=None, p4=None):
+    """
+    Accept up to four command arguments as parameters.
+    These are joined with spaces and processed as a command string, for compatibility with all existing commands.
+    Example: command('sub', 'targetuser', '10', 'weekly')
+    """
     requester = data.fix_name(client.get_requester())
-    parts = cmd.strip().split(" ")
-    if parts and not parts[0].startswith("!"):
-        parts[0] = "!" + parts[0]
-    if parts and parts[0].lower().lstrip("!") == "n":
-        if len(parts) > 1:
-            natural = " ".join(parts[1:])
+    params = [str(x).strip() for x in (p1, p2, p3, p4) if x is not None and str(x).strip() != ""]
+    if not params:
+        return 'No command provided'
+    if not params[0].startswith('!'):
+        params[0] = '!' + params[0]
+    if params[0].lower().lstrip('!') == "n":
+        if len(params) > 1:
+            natural = " ".join(params[1:])
             commands.process_natural_language_command(requester, natural)
     else:
-        commands.process_comment_command(requester, parts)
+        commands.process_comment_command(requester, params)
     return 'ok'
 
 
