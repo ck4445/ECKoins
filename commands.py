@@ -212,7 +212,6 @@ def process_comment_command(comment_author, command_parts):
             return
         bal = data.get_balance("officialtreasury")
         data.set_balance("officialtreasury", bal + amount)
-        data.save_transaction("mint", "officialtreasury", amount)
         data.add_notification(sender, f"{ts} - Printed {amount:.1f} bits into officialtreasury. Balance: {data.get_balance('officialtreasury'):.1f}")
 
     elif command == "burn":
@@ -235,7 +234,6 @@ def process_comment_command(comment_author, command_parts):
             data.add_notification(sender, f"{ts} - officialtreasury has insufficient balance to burn {amount:.1f} bits.")
             return
         data.set_balance("officialtreasury", bal - amount)
-        data.save_transaction("officialtreasury", "burn", amount)
         data.add_notification(sender, f"{ts} - Burned {amount:.1f} bits from officialtreasury. Balance: {data.get_balance('officialtreasury'):.1f}")
 
     elif command == "spend":

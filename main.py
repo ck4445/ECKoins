@@ -144,7 +144,6 @@ def on_ready():
 
 
 def main():
-    data.verify_balance_integrity()
     data.backup_every_n_minutes(10, 10)
     comment_thread = threading.Thread(target=commands.comment_listener_thread, args=(project,), daemon=True)
     comment_thread.start()
