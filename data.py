@@ -83,6 +83,7 @@ def set_balance(user, amount):
     balances = _balances_load()
     balances[user] = amount
     _balances_save(balances)
+    verify_balance_integrity()
 
 
 def get_balance(user):
@@ -176,6 +177,27 @@ def save_transaction(sender, receiver, amount):
     with FileLock(lockfile):
         with open(TRANSACTIONS_FILE, "a") as f:
             f.write(str(tx) + "\n")
+
+def _transactions_load():
+    transactions = []
+    lockfile = TRANSACTIONS_FILE + ".lock"
+    with FileLock(lockfile):
+        if not os.path.exists(TRANSACTIONS_FILE):
+            return transactions
+        with open(TRANSACTIONS_FILE, "r") as f:
+            for line in f:
+                try:
+                    tx = ast.literal_eval(line.strip())
+                    if isinstance(tx, dict) and {
+                        "timestamp",
+                        "from",
+                        "to",
+                        "amount",
+                    }.issubset(tx.keys()):
+                        transactions.append(tx)
+                except (ValueError, SyntaxError):
+                    continue
+    return transactions
 
 # --- Processed Comments Management
 
@@ -417,6 +439,7 @@ def backup_every_n_minutes(n=10, max_backups=10, remote_max_backups=20):
     def backup_func():
         while True:
             try:
+                verify_balance_integrity()
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 dest_folder = os.path.join(BACKUP_DIR, timestamp)
                 ensure_dir(dest_folder)
@@ -753,3 +776,66 @@ def get_all_positions():
     return list(gov.get("positions", {}).keys())
 
 # --- End of Governance Management ---
+
+# --- Integrity Verification ---
+
+def _compute_expected_balances(current_balances, transactions):
+    expected = {user: 100.0 for user in current_balances}
+    for tx in sorted(transactions, key=lambda x: x.get("timestamp", 0)):
+        sender = fix_name(tx.get("from", ""))
+        receiver = fix_name(tx.get("to", ""))
+        amount = float(tx.get("amount", 0))
+        if sender not in expected:
+            expected[sender] = 100.0
+        if receiver not in expected:
+            expected[receiver] = 100.0
+        expected[sender] -= amount
+        expected[receiver] += amount
+    return expected
+
+
+def _copy_latest_backup(destination_dir):
+    backups = sorted(os.listdir(BACKUP_DIR))
+    if not backups:
+        return
+    latest = os.path.join(BACKUP_DIR, backups[-1])
+    if os.path.exists(latest):
+        shutil.copytree(latest, os.path.join(destination_dir, "last_backup"))
+
+
+def _lock_anomaly_state():
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    lock_dir = os.path.join(BACKUP_DIR, f"locked_{timestamp}")
+    ensure_dir(lock_dir)
+    _copy_latest_backup(lock_dir)
+    with FileLock(BALANCE_FILE + ".lock"):
+        if os.path.exists(BALANCE_FILE):
+            shutil.copy2(BALANCE_FILE, os.path.join(lock_dir, "current_balances.txt"))
+    open(os.path.join(lock_dir, "LOCKED"), "w").close()
+
+
+def verify_balance_integrity():
+    """Check for unexpected balance changes and total supply anomalies."""
+    balances = _balances_load()
+    transactions = _transactions_load()
+    expected = _compute_expected_balances(balances, transactions)
+
+    mismatched = {}
+    for user, bal in balances.items():
+        exp = round(expected.get(user, 100.0), 1)
+        if round(bal, 1) != exp:
+            mismatched[user] = exp
+
+    actual_total = round(sum(balances.values()), 1)
+    expected_total = round(sum(expected.values()), 1)
+
+    if actual_total > expected_total:
+        _lock_anomaly_state()
+        return False
+
+    if mismatched:
+        for user, exp in mismatched.items():
+            balances[user] = exp
+        _balances_save(balances)
+    return True
+
